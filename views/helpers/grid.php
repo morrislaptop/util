@@ -52,10 +52,11 @@ class GridHelper extends AppHelper
 				$i = 1;
 				$first = true;
 				$last = end($rows);
-				foreach ($rows as $row)
+				foreach ($rows as $data)
 				{
-					echo $view->element($element, am(array('data' => $row), $opts));
-					if ( $i % $cols === 0 && $row != $last ) {
+					$isLast = $data == $last;
+					echo $view->element($element, am(compact('data', 'i', 'first', 'last'), $opts));
+					if ( $i % $cols === 0 && !$isLast ) {
 						echo '</tr><tr>';
 					}
 					$first = false;
