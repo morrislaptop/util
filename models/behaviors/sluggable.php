@@ -54,7 +54,8 @@ class SluggableBehavior extends ModelBehavior
 	 */
 	function setup(&$Model, $settings = array())
 	{
-		$default = array('label' => array('title'), 'slug' => 'slug', 'separator' => '-', 'length' => 100, 'overwrite' => false, 'translation' => null);
+		$default = array('label' => array('title'), 'slug' => 'slug', 'separator' => '-', 'length' => 100, 'overwrite' => false, 'translation' => null, 'group_fields' => false,
+						 'group_conditions' => array());
 
 		if (!isset($this->__settings[$Model->alias]))
 		{
@@ -62,6 +63,11 @@ class SluggableBehavior extends ModelBehavior
 		}
 
 		$this->__settings[$Model->alias] = am($this->__settings[$Model->alias], ife(is_array($settings), $settings, array()));
+
+		// If group_fields in settings is a string, make it an array
+		if ( is_string($this->__settings[$Model->alias]['group_fields']) ) {
+			$this->__settings[$Model->alias]['group_fields'] = array($this->__settings[$Model->alias]['group_fields']);
+		}
 	}
 
 	/**
@@ -76,14 +82,12 @@ class SluggableBehavior extends ModelBehavior
 		$return = parent::beforeSave($Model);
 
 		// Make label fields an array
-
 		if (!is_array($this->__settings[$Model->alias]['label']))
 		{
 			$this->__settings[$Model->alias]['label'] = array($this->__settings[$Model->alias]['label']);
 		}
 
 		// Make sure all label fields are available
-
 		foreach($this->__settings[$Model->alias]['label'] as $field)
 		{
 			if (!$Model->hasField($field))
@@ -93,11 +97,9 @@ class SluggableBehavior extends ModelBehavior
 		}
 
 		// See if we should be generating a slug
-
 		if ($Model->hasField($this->__settings[$Model->alias]['slug']) && ($this->__settings[$Model->alias]['overwrite'] || empty($Model->id)))
 		{
 			// Build label out of data in label fields, if available, or using a default slug otherwise
-
 			$label = '';
 
 			foreach($this->__settings[$Model->alias]['label'] as $field)
@@ -109,21 +111,30 @@ class SluggableBehavior extends ModelBehavior
 			}
 
 			// Keep on going only if we've got something to slug
-
 			if (!empty($label))
 			{
 				// Get the slug
-
 				$slug = $this->__slug($label, $this->__settings[$Model->alias]);
 
 				// Look for slugs that start with the same slug we've just generated
-
 				$conditions = array($Model->alias . '.' . $this->__settings[$Model->alias]['slug']. ' LIKE' => $slug);
-
 				if (!empty($Model->id))
 				{
 					$conditions[$Model->alias . '.' . $Model->primaryKey . ' <>'] = $Model->id;
 				}
+
+				// restrict to within the subset (group fields and conditions)
+				$group_fields = $this->__settings[$Model->alias]['group_fields'];
+				if ( $group_fields ) foreach ($group_fields as $field) {
+					if ( strpos($field, '.') !== false ) {
+						list($modelName, $fieldName) = explode('.', $field);
+					}
+					else {
+						$fieldName = $field;
+					}
+					$conditions[$Model->alias . '.' . $field] = $Model->data[$Model->alias][$fieldName];
+				}
+				$conditions = array_merge($conditions, $this->__settings[$Model->alias]['group_conditions']);
 
 				$result = $Model->find('all', array('conditions' => $conditions, 'fields' => array($Model->primaryKey, $this->__settings[$Model->alias]['slug']), 'recursive' => -1));
 				$sameUrls = null;
@@ -134,14 +145,12 @@ class SluggableBehavior extends ModelBehavior
 				}
 
 				// If we have collissions
-
 				if (!empty($sameUrls))
 				{
 					$begginingSlug = $slug;
 					$index = 1;
 
 					// Attach an ending incremental number until we find a free slug
-
 					while($index > 0)
 					{
 						if (!in_array($begginingSlug . $this->__settings[$Model->alias]['separator'] . $index, $sameUrls))
@@ -156,7 +165,6 @@ class SluggableBehavior extends ModelBehavior
 
 				// Now set the slug as part of the model data to be saved, making sure that
 				// we are on the white list of fields to be saved
-
 				if (!empty($Model->whitelist) && !in_array($this->__settings[$Model->alias]['slug'], $Model->whitelist))
 				{
 					$Model->whitelist[] = $this->__settings[$Model->alias]['slug'];
@@ -182,7 +190,6 @@ class SluggableBehavior extends ModelBehavior
 		if (!empty($settings['translation']) && is_array($settings['translation']))
 		{
 			// Run user-defined translation tables
-
 			if (count($settings['translation']) >= 2 && count($settings['translation']) % 2 == 0)
 			{
 				for($i=0, $limiti=count($settings['translation']); $i < $limiti; $i+=2)
@@ -210,7 +217,6 @@ class SluggableBehavior extends ModelBehavior
 		else if (!empty($settings['translation']) && is_string($settings['translation']) && in_array(low($settings['translation']), array('utf-8', 'iso-8859-1')))
 		{
 			// Run pre-defined translation tables
-
 			$translations = array(
 				'iso-8859-1' => array(
 					chr(128).chr(131).chr(138).chr(142).chr(154).chr(158)
